@@ -1,0 +1,1426 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Track Organizer</title>
+  <meta name="description" content="Spreadsheet-style track organizer with filters, tabs, and an always-on mini player."/>
+  <style>
+    :root{
+      --bg:#0b0e14;
+      --panel:#111726;
+      --panel2:#0f1422;
+      --text:#e9eefc;
+      --muted:#aab3cc;
+      --line:#24304a;
+      --accent:#7c5cff;
+      --accent2:#2dd4bf;
+      --good:#22c55e;
+      --warn:#f59e0b;
+      --bad:#ef4444;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+      --radius2: 12px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 20% -10%, rgba(124,92,255,.25), transparent 60%),
+                  radial-gradient(900px 600px at 90% 10%, rgba(45,212,191,.18), transparent 55%),
+                  var(--bg);
+      color: var(--text);
+    }
+    a{color:inherit}
+    button, input, select{font:inherit}
+
+    .app{
+      min-height:100%;
+      display:flex;
+      flex-direction:column;
+      padding-bottom: 96px; /* space for fixed player */
+    }
+    header{
+      position:sticky;
+      top:0;
+      z-index:10;
+      background: linear-gradient(to bottom, rgba(11,14,20,.92), rgba(11,14,20,.76));
+      backdrop-filter: blur(10px);
+      border-bottom:1px solid rgba(36,48,74,.6);
+    }
+    .topbar{
+      max-width: 1250px;
+      margin: 0 auto;
+      padding: 16px 16px 10px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width: 240px;
+    }
+    .logo{
+      width:34px;height:34px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 10px 25px rgba(124,92,255,.22);
+    }
+    h1{
+      font-size: 16px;
+      margin:0;
+      letter-spacing:.2px;
+      font-weight: 700;
+    }
+    .sub{
+      margin:0;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .actions{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .btn{
+      border:1px solid rgba(36,48,74,.85);
+      background: rgba(17,23,38,.75);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 12px;
+      cursor:pointer;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+      transition: transform .06s ease, border-color .12s ease, background .12s ease;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      user-select:none;
+    }
+    .btn:hover{ transform: translateY(-1px); border-color: rgba(124,92,255,.7); background: rgba(17,23,38,.9); }
+    .btn:active{ transform: translateY(0px); }
+    .btn.primary{
+      border-color: rgba(124,92,255,.75);
+      background: rgba(124,92,255,.16);
+    }
+    .btn.good{
+      border-color: rgba(34,197,94,.55);
+      background: rgba(34,197,94,.12);
+    }
+    .btn.warn{
+      border-color: rgba(245,158,11,.55);
+      background: rgba(245,158,11,.12);
+    }
+    .btn.danger{
+      border-color: rgba(239,68,68,.55);
+      background: rgba(239,68,68,.10);
+    }
+    .btn.small{ padding:7px 10px; border-radius: 11px; font-size: 13px; }
+
+    .chip{
+      padding: 6px 10px;
+      border-radius: 999px;
+      border:1px solid rgba(36,48,74,.85);
+      background: rgba(17,23,38,.65);
+      color: var(--muted);
+      font-size: 12px;
+      display:inline-flex;
+      gap:6px;
+      align-items:center;
+    }
+
+    .tabs{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .tab{
+      border:1px solid rgba(36,48,74,.85);
+      background: rgba(17,23,38,.55);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 999px;
+      cursor:pointer;
+      user-select:none;
+      font-size: 13px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      transition: border-color .12s ease, background .12s ease;
+    }
+    .tab .count{
+      color: var(--muted);
+      font-size: 12px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border:1px solid rgba(36,48,74,.85);
+      background: rgba(15,20,34,.7);
+    }
+    .tab.active{
+      border-color: rgba(124,92,255,.75);
+      background: rgba(124,92,255,.16);
+    }
+
+    .filters{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .filters-left{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      flex: 1;
+      min-width: 260px;
+    }
+    .field{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      border:1px solid rgba(36,48,74,.85);
+      background: rgba(17,23,38,.55);
+      border-radius: 12px;
+      padding: 8px 10px;
+      min-width: 220px;
+      flex: 1;
+      max-width: 520px;
+    }
+    .field input{
+      width:100%;
+      border:0;
+      outline:0;
+      background: transparent;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .field input::placeholder{ color: rgba(170,179,204,.7); }
+
+    /* Genre filter dropdown (header) */
+    .select{
+      border:1px solid rgba(36,48,74,.85);
+      background: rgba(17,23,38,.55);
+      border-radius: 12px;
+      padding: 8px 10px;
+      color: var(--text);
+      min-width: 180px;
+      outline: none;
+    }
+
+    .quick{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .toggle{
+      border:1px solid rgba(36,48,74,.85);
+      background: rgba(17,23,38,.55);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 999px;
+      cursor:pointer;
+      user-select:none;
+      font-size: 13px;
+    }
+    .toggle.on{
+      border-color: rgba(45,212,191,.75);
+      background: rgba(45,212,191,.14);
+    }
+
+    main{
+      max-width: 1250px;
+      width:100%;
+      margin: 0 auto;
+      padding: 16px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .card{
+      background: rgba(17,23,38,.60);
+      border:1px solid rgba(36,48,74,.75);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .table-wrap{
+    max-height: calc(100vh - 160px); /* adjust if needed */
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    }
+    table{
+      width:100%;
+      border-collapse: separate;
+      border-spacing:0;
+      min-width: 1020px;
+    }
+    thead th{
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      text-align:left;
+      font-size: 12px;
+      letter-spacing:.35px;
+      text-transform: uppercase;
+      color: rgba(170,179,204,.9);
+      background: rgba(11,14,20,.72);
+      backdrop-filter: blur(10px);
+      border-bottom:1px solid rgba(36,48,74,.75);
+      padding: 12px 10px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    thead th:first-child{ position: sticky; left:0; z-index:3; }
+    tbody td{
+      border-bottom:1px solid rgba(36,48,74,.55);
+      padding: 10px 10px;
+      vertical-align:middle;
+      font-size: 14px;
+      white-space:nowrap;
+      background: rgba(17,23,38,.35);
+    }
+    tbody tr:nth-child(2n) td{ background: rgba(15,20,34,.35); }
+
+    /* Sticky Track column */
+    tbody td:first-child{
+      position: sticky;
+      left:0;
+      z-index:1;
+      background: rgba(17,23,38,.9);
+    }
+    tbody tr:nth-child(2n) td:first-child{ background: rgba(15,20,34,.9); }
+
+    /* Column sizing + centering */
+    th[data-key="title"], td[data-key="title"]{ min-width: 220px; max-width: 320px; }
+    th[data-key="genre"], td[data-key="genre"]{ min-width: 170px; }
+
+    /* Checkbox columns: equal width + centered (header + cells) */
+    th[data-key="complete"], th[data-key="master"], th[data-key="released"],
+    th[data-key="shortList"], th[data-key="topPicks"]{
+      text-align:center;
+      width: 82px;
+      min-width: 82px;
+      max-width: 82px;
+    }
+    td.checkcell{
+      text-align:center;
+      width: 82px;
+      min-width: 82px;
+      max-width: 82px;
+    }
+
+    th[data-key="listen"], td[data-key="listen"]{ text-align:center; width: 90px; min-width: 90px; }
+    th[data-key="length"], td[data-key="length"]{ text-align:center; width: 110px; min-width: 110px; }
+    th[data-key="actions"], td[data-key="actions"]{ text-align:center; width: 110px; min-width: 110px; }
+
+    .titlecell{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .titlecell input{
+      width: 100%;
+      border:1px solid rgba(36,48,74,.75);
+      background: rgba(11,14,20,.35);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 8px 10px;
+      outline:none;
+      min-width: 200px;
+    }
+    .titlecell input:focus{
+      border-color: rgba(124,92,255,.75);
+      box-shadow: 0 0 0 3px rgba(124,92,255,.12);
+    }
+    .check{
+      width: 18px; height: 18px;
+      accent-color: var(--accent);
+      cursor:pointer;
+    }
+
+    /* Genre dropdown inside rows: make text darker + light background for readability */
+    .genre{
+      border:1px solid rgba(36,48,74,.75);
+      background: rgba(233,238,252,.92);
+      color: #0b0e14;
+      border-radius: 12px;
+      padding: 7px 10px;
+      outline:none;
+      min-width: 160px;
+    }
+    .genre option{
+      color: #0b0e14;
+      background: #e9eefc;
+    }
+
+    .listenBtn{
+      width: 44px;
+      height: 36px;
+      border-radius: 12px;
+      border:1px solid rgba(124,92,255,.75);
+      background: rgba(124,92,255,.16);
+      color: var(--text);
+      cursor:pointer;
+      display:inline-grid;
+      place-items:center;
+      box-shadow: 0 10px 25px rgba(124,92,255,.10);
+      user-select:none;
+    }
+    .listenBtn.secondary{
+      border-color: rgba(36,48,74,.85);
+      background: rgba(17,23,38,.65);
+      box-shadow:none;
+    }
+    .listenBtn.dragover{
+    outline: 2px solid rgba(45,212,191,.9);
+    box-shadow: 0 0 0 4px rgba(45,212,191,.15);
+    }
+    .mini{
+      position:fixed;
+      left:0; right:0; bottom:0;
+      z-index:20;
+      background: linear-gradient(to top, rgba(11,14,20,.92), rgba(11,14,20,.78));
+      backdrop-filter: blur(12px);
+      border-top:1px solid rgba(36,48,74,.65);
+    }
+    .mini-inner{
+      max-width:1250px;
+      margin:0 auto;
+      padding: 10px 16px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .now{
+      min-width: 220px;
+      flex: 1;
+    }
+    .now .t{ font-weight: 700; font-size: 14px; line-height: 1.2; }
+    .now .g{ color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    .player-controls{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex: 2;
+      min-width: 320px;
+    }
+    .bigplay{
+      width: 44px; height: 44px;
+      border-radius: 14px;
+      border:1px solid rgba(124,92,255,.75);
+      background: rgba(124,92,255,.16);
+      color: var(--text);
+      cursor:pointer;
+      display:grid;
+      place-items:center;
+      box-shadow: 0 10px 25px rgba(124,92,255,.16);
+    }
+    .timeline{
+      flex:1;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width: 220px;
+    }
+    .time{
+      font-size: 12px;
+      color: var(--muted);
+      width: 82px;
+      text-align:center;
+      font-variant-numeric: tabular-nums;
+    }
+    input[type="range"]{ width:100%; cursor:pointer; height: 6px; }
+    .right-tools{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      justify-content:flex-end;
+      min-width: 220px;
+    }
+    .muted-note{
+      color: var(--muted);
+      font-size: 12px;
+      padding: 10px 16px 0;
+      max-width:1250px;
+      margin:0 auto;
+    }
+    .hint{
+      color: var(--muted);
+      font-size: 12px;
+      padding: 10px 12px;
+      border-top:1px solid rgba(36,48,74,.55);
+      background: rgba(15,20,34,.25);
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .hint .left{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+    .kbd{
+      font-size: 12px;
+      border:1px solid rgba(36,48,74,.85);
+      border-bottom-color: rgba(36,48,74,.55);
+      background: rgba(11,14,20,.25);
+      border-radius: 10px;
+      padding: 3px 8px;
+      color: rgba(170,179,204,.95);
+    }
+
+    @media (max-width: 720px){
+      .brand{min-width: unset}
+      .player-controls{min-width: unset}
+      .right-tools{justify-content:flex-start}
+      table{min-width: 980px;}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="topbar">
+      <div class="row">
+        <div class="brand">
+          <div class="logo"></div>
+          <div>
+            <h1>Track Organizer</h1>
+            <p class="sub">Spreadsheet-style + tabs + genre + fixed mini player (auto-saves)</p>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" id="addTrackBtn">➕ Add Track</button>
+          <button class="btn" id="addGenreBtn">🏷️ Add Genre</button>
+          <button class="btn good" id="backupBtn">⬇️ Backup</button>
+          <button class="btn warn" id="restoreBtn">⬆️ Restore</button>
+          <button class="btn danger" id="clearBtn" title="Clears all tracks and stored audio from this browser">🧨 Clear All</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="tabs" id="tabs"></div>
+      </div>
+
+      <div class="filters">
+        <div class="filters-left">
+          <div class="field" title="Search by track title">
+            🔎 <input id="searchInput" placeholder="Search tracks… (title)" />
+          </div>
+
+          <select class="select" id="genreFilter" title="Filter by genre">
+            <option value="">All Genres</option>
+          </select>
+
+          <div class="quick" title="Quick filters">
+            <button class="toggle" id="qNeedsFin">Needs finishing</button>
+            <button class="toggle" id="qReadyMaster">Ready to master</button>
+            <button class="toggle" id="qReadyRelease">Ready to release</button>
+          </div>
+        </div>
+
+        <div class="chip" id="statusChip">0 tracks</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr id="theadRow"></tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="hint">
+        <div class="left">
+          <span class="chip">Tip: paste a whole list into the Track field (one per line) — duplicates are skipped.</span>
+          <span class="chip"><span class="kbd">Enter</span> adds a new row</span>
+          <span class="chip"><span class="kbd">Shift</span> + click Listen to replace audio</span>
+        </div>
+        <div class="left">
+          <span class="chip">Sort: click column headers</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Fixed mini player -->
+  <div class="mini">
+    <div class="mini-inner">
+      <div class="now">
+        <div class="t" id="nowTitle">No track loaded</div>
+        <div class="g" id="nowGenre">—</div>
+      </div>
+
+      <div class="player-controls">
+        <button class="bigplay" id="bigPlayBtn" title="Play/Pause">▶</button>
+        <div class="timeline">
+          <div class="time" id="curTime">0:00</div>
+          <input type="range" id="seek" min="0" max="1000" value="0" />
+          <div class="time" id="durTime">0:00</div>
+        </div>
+      </div>
+
+      <div class="right-tools">
+        <button class="btn small" id="stopBtn" title="Stop">⏹ Stop</button>
+        <button class="btn small" id="clearPlayerBtn" title="Unload track from player">🧽 Unload</button>
+      </div>
+    </div>
+    <div class="muted-note" id="playerNote">Attach audio to a track, then press Play on that row.</div>
+  </div>
+
+  <audio id="audio" preload="metadata"></audio>
+</div>
+
+<input type="file" id="restoreFile" accept="application/json" hidden />
+<input type="file" id="audioPicker" accept="audio/*" hidden />
+
+<script>
+/** ---------------------------
+ *  Storage (metadata + audio)
+ * --------------------------*/
+const LS_KEY = "track_organizer_v1";
+const DB_NAME = "track_organizer_audio_v1";
+const DB_STORE = "audio";
+let dbPromise = null;
+
+function openAudioDB(){
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+async function idbPut(key, blob){
+  const db = await openAudioDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).put(blob, key);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet(key){
+  const db = await openAudioDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readonly");
+    const req = tx.objectStore(DB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbDelete(key){
+  const db = await openAudioDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).delete(key);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbClear(){
+  const db = await openAudioDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).clear();
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function saveState(){
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+}
+function loadState(){
+  const raw = localStorage.getItem(LS_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function stripExtension(name){
+  return (name || "").replace(/\.[^/.]+$/, "");
+}
+
+async function attachFilesStartingAtTrack(startTrackId, files){
+  const list = Array.from(files || []).filter(f => f && f.type && f.type.startsWith("audio/"));
+  if (!list.length) return;
+
+  // Find starting index in the main state order (not filtered)
+  let idx = state.tracks.findIndex(t => t.id === startTrackId);
+  if (idx < 0) return;
+
+  for (let i = 0; i < list.length; i++){
+    const file = list[i];
+
+    // Ensure a track exists at idx+i
+    while (idx + i >= state.tracks.length){
+      state.tracks.push(makeTrack(""));
+    }
+
+    const tr = state.tracks[idx + i];
+
+    // If the title is blank, auto-name it from the file
+    if (!tr.title || !tr.title.trim()){
+      tr.title = stripExtension(file.name);
+    }
+
+    await attachAudioToTrack(tr.id, file);
+  }
+
+  saveState();
+}
+
+/** ---------------------------
+ *  App State
+ * --------------------------*/
+const FLAG_KEYS = ["Complete","master","released","shortList","topPicks"];
+const FLAG_LABELS = {
+  Complete: "Complete",
+  master: "master",
+  released: "Released",
+  shortList: "Short list",
+  topPicks: "Top Picks",
+};
+const TABS = [
+  {id:"all", label:"All"},
+  {id:"Complete", label:"Complete"},
+  {id:"master", label:"master"},
+  {id:"released", label:"Released"},
+  {id:"shortList", label:"Short list"},
+  {id:"topPicks", label:"Top Picks"},
+  {id:"listen", label:"Listen"},
+];
+
+const defaultState = {
+  genres: ["Trap/Rap","Pop","Country","Rock","EDM","R&B","Lo-Fi","Other"],
+  tracks: [],
+  ui: {
+    activeTab: "all",
+    search: "",
+    genre: "",
+    quick: { needsFin:false, readyMaster:false, readyRelease:false },
+    sort: { key: "title", dir: "asc" }
+  }
+};
+
+let state = loadState() || structuredClone(defaultState);
+
+/** ---------------------------
+ *  Helpers
+ * --------------------------*/
+function uid(){
+  return "t_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+function normTitle(s){
+  return (s || "").trim().toLowerCase();
+}
+function fmtTime(sec){
+  if (!isFinite(sec) || sec < 0) return "0:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2,"0")}`;
+}
+function downloadFile(filename, content, mime="application/json"){
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+async function blobToBase64(blob){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+async function base64ToBlob(dataUrl){
+  const res = await fetch(dataUrl);
+  return await res.blob();
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, (m)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
+}
+
+/** ---------------------------
+ *  UI Elements
+ * --------------------------*/
+const elTabs = document.getElementById("tabs");
+const elTBody = document.getElementById("tbody");
+const elTHeadRow = document.getElementById("theadRow");
+const elSearch = document.getElementById("searchInput");
+const elGenreFilter = document.getElementById("genreFilter");
+const elStatusChip = document.getElementById("statusChip");
+
+const btnAddTrack = document.getElementById("addTrackBtn");
+const btnAddGenre = document.getElementById("addGenreBtn");
+const btnBackup = document.getElementById("backupBtn");
+const btnRestore = document.getElementById("restoreBtn");
+const btnClear = document.getElementById("clearBtn");
+const restoreFile = document.getElementById("restoreFile");
+
+const qNeedsFin = document.getElementById("qNeedsFin");
+const qReadyMaster = document.getElementById("qReadyMaster");
+const qReadyRelease = document.getElementById("qReadyRelease");
+
+const audio = document.getElementById("audio");
+const bigPlayBtn = document.getElementById("bigPlayBtn");
+const stopBtn = document.getElementById("stopBtn");
+const clearPlayerBtn = document.getElementById("clearPlayerBtn");
+const seek = document.getElementById("seek");
+const nowTitle = document.getElementById("nowTitle");
+const nowGenre = document.getElementById("nowGenre");
+const curTime = document.getElementById("curTime");
+const durTime = document.getElementById("durTime");
+const playerNote = document.getElementById("playerNote");
+
+const audioPicker = document.getElementById("audioPicker");
+
+let currentTrackId = null;
+let currentObjectUrl = null;
+let raf = null;
+
+/** ---------------------------
+ *  Rendering
+ * --------------------------*/
+function buildHeaders(){
+  const cols = [
+    {key:"title", label:"Track"},
+    {key:"genre", label:"Genre"},
+    ...FLAG_KEYS.map(k => ({key:k, label:FLAG_LABELS[k]})),
+    {key:"listen", label:"Listen"},
+    {key:"length", label:"Length"},
+    {key:"actions", label:"Actions"},
+  ];
+  elTHeadRow.innerHTML = "";
+  cols.forEach(c => {
+    const th = document.createElement("th");
+    th.textContent = c.label;
+    th.dataset.key = c.key;
+    th.title = (c.key !== "listen" && c.key !== "actions" && c.key !== "length") ? "Click to sort" : "";
+    th.addEventListener("click", () => {
+      if (c.key === "listen" || c.key === "actions") return;
+      const s = state.ui.sort;
+      const dir = (s.key === c.key && s.dir === "asc") ? "desc" : "asc";
+      state.ui.sort = { key: c.key, dir };
+      saveState();
+      render();
+    });
+    elTHeadRow.appendChild(th);
+  });
+}
+
+function computeCounts(){
+  const c = {};
+  c.all = state.tracks.length;
+  FLAG_KEYS.forEach(k => c[k] = state.tracks.filter(tr => !!tr.flags?.[k]).length);
+  c.listen = state.tracks.filter(tr => !!tr.hasAudio).length;
+  return c;
+}
+function renderTabs(){
+  const counts = computeCounts();
+  elTabs.innerHTML = "";
+  TABS.forEach(t => {
+    const b = document.createElement("div");
+    b.className = "tab" + (state.ui.activeTab === t.id ? " active" : "");
+    b.innerHTML = `<span>${t.label}</span><span class="count">${counts[t.id] ?? 0}</span>`;
+    b.addEventListener("click", () => {
+      state.ui.activeTab = t.id;
+      saveState();
+      render();
+    });
+    elTabs.appendChild(b);
+  });
+}
+
+function renderGenreFilter(){
+  const genres = state.genres.slice().sort((a,b)=>a.localeCompare(b));
+  const prev = state.ui.genre || "";
+  elGenreFilter.innerHTML = `<option value="">All Genres</option>` +
+    genres.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
+  elGenreFilter.value = prev;
+}
+
+function applyFilters(tracks){
+  let out = tracks;
+  const tab = state.ui.activeTab;
+  if (tab === "listen") out = out.filter(t => !!t.hasAudio);
+  else if (tab !== "all") out = out.filter(t => !!t.flags?.[tab]);
+
+  const q = (state.ui.search || "").trim().toLowerCase();
+  if (q) out = out.filter(t => (t.title || "").toLowerCase().includes(q));
+
+  const g = state.ui.genre || "";
+  if (g) out = out.filter(t => (t.genre || "") === g);
+
+  const quick = state.ui.quick;
+  if (quick.needsFin) out = out.filter(t => !t.flags?.Complete);
+  if (quick.readyMaster) out = out.filter(t => t.flags?.Complete && !t.flags?.master);
+  if (quick.readyRelease) out = out.filter(t => t.flags?.master && !t.flags?.released);
+
+  return out;
+}
+
+function applySort(tracks){
+  const {key, dir} = state.ui.sort;
+  const mult = dir === "asc" ? 1 : -1;
+
+  const getter = (t) => {
+    if (key === "title") return (t.title || "").toLowerCase();
+    if (key === "genre") return (t.genre || "").toLowerCase();
+    if (key === "length") return t.durationSec || 0;
+    if (FLAG_KEYS.includes(key)) return t.flags?.[key] ? 1 : 0;
+    return (t[key] ?? "");
+  };
+
+  return tracks.slice().sort((a,b)=>{
+    const av = getter(a);
+    const bv = getter(b);
+    if (typeof av === "number" && typeof bv === "number") return (av - bv) * mult;
+    return String(av).localeCompare(String(bv)) * mult;
+  });
+}
+
+function renderQuickButtons(){
+  qNeedsFin.classList.toggle("on", !!state.ui.quick.needsFin);
+  qReadyMaster.classList.toggle("on", !!state.ui.quick.readyMaster);
+  qReadyRelease.classList.toggle("on", !!state.ui.quick.readyRelease);
+}
+
+function renderTable(){
+  const filtered = applySort(applyFilters(state.tracks));
+  elStatusChip.textContent = `${filtered.length} track${filtered.length===1?"":"s"} shown`;
+  elTBody.innerHTML = "";
+
+  filtered.forEach(tr => {
+    const trEl = document.createElement("tr");
+
+    // Track
+    const tdTitle = document.createElement("td");
+    tdTitle.dataset.key = "title";
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "titlecell";
+
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.value = tr.title || "";
+    titleInput.placeholder = "Track title…";
+    titleInput.dataset.focusid = tr.id;
+
+    titleInput.addEventListener("input", () => { tr.title = titleInput.value; saveState(); });
+
+    titleInput.addEventListener("keydown", (e)=>{
+      if (e.key === "Enter"){
+        e.preventDefault();
+        addTrackAfter(tr.id);
+      }
+    });
+
+    titleInput.addEventListener("paste", (e)=>{
+      const paste = (e.clipboardData || window.clipboardData).getData("text");
+      if (!paste) return;
+      const lines = paste.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      if (lines.length <= 1) return;
+      e.preventDefault();
+
+      const existing = new Set(state.tracks.map(t=>normTitle(t.title)));
+      const first = lines[0];
+      if (first && !existing.has(normTitle(first))) {
+        tr.title = first;
+        titleInput.value = first;
+        existing.add(normTitle(first));
+      }
+
+      const rest = lines.slice(1);
+      const toAdd = [];
+      for (const line of rest){
+        const nt = normTitle(line);
+        if (!nt) continue;
+        if (existing.has(nt)) continue;
+        existing.add(nt);
+        toAdd.push(makeTrack(line));
+      }
+      if (toAdd.length){
+        const idx = state.tracks.findIndex(t=>t.id === tr.id);
+        state.tracks.splice(idx+1, 0, ...toAdd);
+      }
+      saveState();
+      render();
+      setTimeout(()=>document.querySelector(`input[data-focusid="${toAdd[0]?.id || ""}"]`)?.focus(), 30);
+    });
+
+    // badges
+    const badges = document.createElement("div");
+    badges.className = "row-badges";
+    const b = [];
+    b.slice(0,3).forEach(x=>{
+      const sp = document.createElement("span");
+      sp.className = `badge ${x.cls}`;
+      sp.textContent = x.txt;
+      badges.appendChild(sp);
+    });
+
+    titleWrap.appendChild(titleInput);
+    if (badges.childNodes.length) titleWrap.appendChild(badges);
+    tdTitle.appendChild(titleWrap);
+    trEl.appendChild(tdTitle);
+
+    // Genre
+    const tdGenre = document.createElement("td");
+    tdGenre.dataset.key = "genre";
+    const sel = document.createElement("select");
+    sel.className = "genre";
+    sel.innerHTML = `<option value="">—</option>` + state.genres.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
+    sel.value = tr.genre || "";
+    sel.addEventListener("change", ()=>{
+      tr.genre = sel.value;
+      saveState();
+      renderTabs();
+    });
+    tdGenre.appendChild(sel);
+    trEl.appendChild(tdGenre);
+
+    // Checkboxes (centered + equal width)
+    FLAG_KEYS.forEach(k=>{
+      const td = document.createElement("td");
+      td.className = "checkcell";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "check";
+      cb.checked = !!tr.flags?.[k];
+      cb.addEventListener("change", ()=>{
+        tr.flags = tr.flags || {};
+        tr.flags[k] = cb.checked;
+        if (k === "released" && cb.checked){ tr.flags.Complete = true; tr.flags.master = true; }
+        if (k === "master" && cb.checked){ tr.flags.Complete = true; }
+        saveState();
+        render();
+      });
+      td.appendChild(cb);
+      trEl.appendChild(td);
+    });
+
+    // Listen (single button: + attach OR play/pause if attached)
+    const tdListen = document.createElement("td");
+    tdListen.dataset.key = "listen";
+
+    const listenBtn = document.createElement("button");
+    listenBtn.className = "listenBtn" + (tr.hasAudio ? "" : " secondary");
+    const isPlayingThis = (currentTrackId === tr.id && !audio.paused);
+    listenBtn.textContent = tr.hasAudio ? (isPlayingThis ? "⏸" : "▶") : "+";
+    listenBtn.title = tr.hasAudio
+      ? "Play/Pause (Shift+Click to replace audio)"
+      : "Attach audio";
+
+    listenBtn.addEventListener("click", async (e)=>{
+      if (!tr.hasAudio || e.shiftKey){
+        // attach/replace
+        audioPicker.onchange = null;
+        audioPicker.value = "";
+        audioPicker.onchange = async () => {
+          const file = audioPicker.files?.[0];
+          if (!file) return;
+          await attachAudioToTrack(tr.id, file);
+          render();
+        };
+        audioPicker.click();
+        return;
+      }
+
+      // play/pause
+      if (currentTrackId === tr.id && !audio.paused){
+        audio.pause();
+        render();
+      } else {
+        await loadIntoPlayer(tr.id);
+        await audio.play().catch(()=>{});
+        render();
+      }
+    });
+        // --- Drag & drop support on the Listen button ---
+    listenBtn.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    listenBtn.classList.add("dragover");
+    });
+    listenBtn.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    });
+    listenBtn.addEventListener("dragleave", () => {
+    listenBtn.classList.remove("dragover");
+    });
+    listenBtn.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    listenBtn.classList.remove("dragover");
+
+    const files = e.dataTransfer?.files;
+    if (!files || !files.length) return;
+
+    // Drop multiple files onto one row: fill this row + next rows
+  await attachFilesStartingAtTrack(tr.id, files);
+  render();
+});
+
+    tdListen.appendChild(listenBtn);
+    trEl.appendChild(tdListen);
+
+    // Length column
+    const tdLen = document.createElement("td");
+    tdLen.dataset.key = "length";
+    tdLen.style.textAlign = "center";
+    tdLen.textContent = tr.durationSec ? fmtTime(tr.durationSec) : "—";
+    trEl.appendChild(tdLen);
+
+    // Actions
+    const tdAct = document.createElement("td");
+    tdAct.dataset.key = "actions";
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn small danger";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", async ()=>{
+      if (!confirm(`Delete "${tr.title || "Untitled"}"?`)) return;
+      await deleteTrack(tr.id);
+      render();
+    });
+    tdAct.appendChild(delBtn);
+    trEl.appendChild(tdAct);
+
+    elTBody.appendChild(trEl);
+  });
+}
+
+function render(){
+  buildHeaders();
+  renderTabs();
+  renderGenreFilter();
+  renderQuickButtons();
+  renderTable();
+}
+
+/** ---------------------------
+ *  Track ops
+ * --------------------------*/
+function makeTrack(title=""){
+  return {
+    id: uid(),
+    title: title || "",
+    genre: "",
+    flags: { Complete:false, master:false, released:false, shortList:false, topPicks:false },
+    hasAudio: false,
+    durationSec: 0,
+    audioName: ""
+  };
+}
+function addTrackAfter(afterId){
+  const idx = state.tracks.findIndex(t=>t.id===afterId);
+  const t = makeTrack("");
+  state.tracks.splice(idx+1, 0, t);
+  saveState();
+  render();
+  setTimeout(()=>document.querySelector(`input[data-focusid="${t.id}"]`)?.focus(), 30);
+}
+async function deleteTrack(id){
+  const idx = state.tracks.findIndex(t=>t.id===id);
+  if (idx >= 0) state.tracks.splice(idx,1);
+  saveState();
+  await idbDelete(id);
+  if (currentTrackId === id){
+    stopPlayback();
+    unloadPlayer();
+  }
+}
+function trackById(id){
+  return state.tracks.find(t=>t.id===id) || null;
+}
+
+/** ---------------------------
+ *  Audio attach + duration
+ * --------------------------*/
+async function attachAudioToTrack(trackId, file){
+  const tr = trackById(trackId);
+  if (!tr) return;
+
+  await idbPut(trackId, file);
+
+  const tmpUrl = URL.createObjectURL(file);
+  const dur = await new Promise((resolve) => {
+    const a = new Audio();
+    a.preload = "metadata";
+    a.src = tmpUrl;
+    a.onloadedmetadata = () => resolve(a.duration || 0);
+    a.onerror = () => resolve(0);
+  });
+  URL.revokeObjectURL(tmpUrl);
+
+  tr.hasAudio = true;
+  tr.durationSec = Number.isFinite(dur) ? Math.round(dur) : 0;
+  tr.audioName = file.name || "";
+  saveState();
+}
+
+/** ---------------------------
+ *  Player
+ * --------------------------*/
+function setObjectUrl(url){
+  if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+  currentObjectUrl = url;
+}
+async function loadIntoPlayer(trackId){
+  const tr = trackById(trackId);
+  if (!tr || !tr.hasAudio) return;
+
+  if (!audio.paused) audio.pause();
+
+  const blob = await idbGet(trackId);
+  if (!blob){
+    alert("Audio not found in storage. Try re-attaching the file.");
+    tr.hasAudio = false;
+    tr.durationSec = 0;
+    saveState();
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  setObjectUrl(url);
+
+  currentTrackId = trackId;
+  audio.src = url;
+  audio.currentTime = 0;
+
+  nowTitle.textContent = tr.title || "Untitled";
+  nowGenre.textContent = tr.genre ? tr.genre : "—";
+  playerNote.textContent = tr.audioName ? `Loaded: ${tr.audioName}` : "Loaded track audio.";
+
+  await new Promise((resolve)=>{
+    audio.onloadedmetadata = () => resolve(true);
+    audio.onerror = () => resolve(true);
+  });
+
+  durTime.textContent = fmtTime(audio.duration || tr.durationSec || 0);
+  curTime.textContent = fmtTime(0);
+  seek.value = 0;
+  startRaf();
+}
+function startRaf(){
+  stopRaf();
+  const tick = () => {
+    const d = audio.duration || 0;
+    const t = audio.currentTime || 0;
+    curTime.textContent = fmtTime(t);
+    durTime.textContent = fmtTime(d || 0);
+    if (d > 0){
+      seek.value = Math.min(1000, Math.max(0, Math.round((t / d) * 1000)));
+    } else seek.value = 0;
+
+    bigPlayBtn.textContent = audio.paused ? "▶" : "⏸";
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+}
+function stopRaf(){
+  if (raf) cancelAnimationFrame(raf);
+  raf = null;
+}
+function stopPlayback(){
+  audio.pause();
+  audio.currentTime = 0;
+}
+function unloadPlayer(){
+  stopRaf();
+  if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+  currentObjectUrl = null;
+  audio.removeAttribute("src");
+  audio.load();
+  currentTrackId = null;
+
+  nowTitle.textContent = "No track loaded";
+  nowGenre.textContent = "—";
+  curTime.textContent = "0:00";
+  durTime.textContent = "0:00";
+  seek.value = 0;
+  bigPlayBtn.textContent = "▶";
+  playerNote.textContent = "Attach audio to a track, then press Play on that row.";
+}
+seek.addEventListener("input", ()=>{
+  const d = audio.duration || 0;
+  if (!d) return;
+  audio.currentTime = (Number(seek.value) / 1000) * d;
+});
+bigPlayBtn.addEventListener("click", async ()=>{
+  if (!currentTrackId){
+    const filtered = applySort(applyFilters(state.tracks)).filter(t=>t.hasAudio);
+    if (filtered.length){
+      await loadIntoPlayer(filtered[0].id);
+      await audio.play().catch(()=>{});
+      render();
+    }
+    return;
+  }
+  if (audio.paused) await audio.play().catch(()=>{});
+  else audio.pause();
+  render();
+});
+document.getElementById("stopBtn").addEventListener("click", ()=>{ stopPlayback(); render(); });
+document.getElementById("clearPlayerBtn").addEventListener("click", ()=>{ stopPlayback(); unloadPlayer(); render(); });
+audio.addEventListener("ended", ()=> render());
+
+/** ---------------------------
+ *  Top controls
+ * --------------------------*/
+document.getElementById("addTrackBtn").addEventListener("click", ()=>{
+  const t = makeTrack("");
+  state.tracks.push(t);
+  saveState();
+  render();
+  setTimeout(()=>document.querySelector(`input[data-focusid="${t.id}"]`)?.focus(), 30);
+});
+
+document.getElementById("addGenreBtn").addEventListener("click", ()=>{
+  const name = prompt("Add a new genre (example: Psychedelic Trap):");
+  if (!name) return;
+  const g = name.trim();
+  if (!g) return;
+  if (state.genres.map(x=>x.toLowerCase()).includes(g.toLowerCase())){
+    alert("That genre already exists.");
+    return;
+  }
+  state.genres.push(g);
+  saveState();
+  render();
+});
+
+document.getElementById("backupBtn").addEventListener("click", async ()=>{
+  const includeAudio = confirm(
+    "Backup options:\n\nOK = Include attached audio files (bigger backup)\nCancel = Metadata only (titles/checkboxes/genres only)"
+  );
+
+  const backup = {
+    version: 1,
+    createdAt: new Date().toISOString(),
+    metadata: structuredClone(state),
+    audio: {}
+  };
+
+  if (includeAudio){
+    const tracksWithAudio = state.tracks.filter(t=>t.hasAudio);
+    for (const t of tracksWithAudio){
+      const blob = await idbGet(t.id);
+      if (!blob) continue;
+      backup.audio[t.id] = await blobToBase64(blob);
+    }
+  }
+
+  const stamp = new Date().toISOString().replaceAll(":","-").slice(0,19);
+  downloadFile(`track-backup-${stamp}.json`, JSON.stringify(backup, null, 2));
+});
+
+document.getElementById("restoreBtn").addEventListener("click", ()=>{
+  restoreFile.value = "";
+  restoreFile.click();
+});
+restoreFile.addEventListener("change", async ()=>{
+  const file = restoreFile.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { alert("Invalid backup file."); return; }
+  if (!parsed?.metadata?.tracks || !parsed?.metadata?.ui){
+    alert("Backup file format not recognized.");
+    return;
+  }
+  const ok = confirm("Restore this backup? This will replace your current list in this browser.");
+  if (!ok) return;
+
+  state = parsed.metadata;
+
+  if (parsed.audio && typeof parsed.audio === "object"){
+    for (const [trackId, dataUrl] of Object.entries(parsed.audio)){
+      try{
+        const blob = await base64ToBlob(dataUrl);
+        await idbPut(trackId, blob);
+        const tr = trackById(trackId);
+        if (tr) tr.hasAudio = true;
+      }catch{}
+    }
+  }
+  saveState();
+  unloadPlayer();
+  render();
+});
+
+document.getElementById("clearBtn").addEventListener("click", async ()=>{
+  const ok = confirm("Clear ALL tracks + stored audio from this browser?\n\nThis cannot be undone (unless you have a backup).");
+  if (!ok) return;
+  state = structuredClone(defaultState);
+  saveState();
+  unloadPlayer();
+  await idbClear();
+  render();
+});
+
+elSearch.value = state.ui.search || "";
+elSearch.addEventListener("input", ()=>{
+  state.ui.search = elSearch.value;
+  saveState();
+  render();
+});
+elGenreFilter.addEventListener("change", ()=>{
+  state.ui.genre = elGenreFilter.value;
+  saveState();
+  render();
+});
+qNeedsFin.addEventListener("click", ()=>{
+  state.ui.quick.needsFin = !state.ui.quick.needsFin;
+  saveState(); render();
+});
+qReadyMaster.addEventListener("click", ()=>{
+  state.ui.quick.readyMaster = !state.ui.quick.readyMaster;
+  saveState(); render();
+});
+qReadyRelease.addEventListener("click", ()=>{
+  state.ui.quick.readyRelease = !state.ui.quick.readyRelease;
+  saveState(); render();
+});
+
+/** ---------------------------
+ *  First run seed row
+ * --------------------------*/
+if (!state.tracks.length){
+  state.tracks.push(makeTrack(""));
+  saveState();
+}
+
+render();
+</script>
+</body>
+</html>
