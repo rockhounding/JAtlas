@@ -594,6 +594,91 @@
 <input type="file" id="restoreFile" accept="application/json" hidden />
 <input type="file" id="audioPicker" accept="audio/*" hidden />
 
+<script type="module">
+  // Firebase (Auth + Firestore) for saving metadata only (audio stays local in IndexedDB)
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyA6mU7YqivkCJC6wOsfJri8tIzkeeU9-LY",
+    authDomain: "jatlas-f175b.firebaseapp.com",
+    projectId: "jatlas-f175b",
+    storageBucket: "jatlas-f175b.firebasestorage.app",
+    messagingSenderId: "876999634932",
+    appId: "1:876999634932:web:742d93d3b0c5ddb42753a1",
+    measurementId: "G-NGMH2LEC9J"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  try { getAnalytics(app); } catch {}
+
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // Global bridge for the non-module app script
+  window.__fb = window.__fb || { save: null, apply: null, pending: null, ready: false };
+
+  let ref = null;
+  let saveTimer = null;
+  let isApplyingRemote = false;
+
+  function queueApply(remoteState) {
+    // If your main script hasn't attached its apply() yet, stash it
+    if (window.__fb && typeof window.__fb.apply === "function") {
+      isApplyingRemote = true;
+      try { window.__fb.apply(remoteState); } finally { isApplyingRemote = false; }
+    } else {
+      window.__fb.pending = remoteState;
+    }
+  }
+
+  function setSaveFn() {
+    window.__fb.save = (stateObj) => {
+      if (!window.__fb.ready || !ref) return;
+      if (isApplyingRemote || window.__fbApplyingRemote) return;
+
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        try {
+          await setDoc(ref, { state: stateObj, updatedAt: serverTimestamp() }, { merge: true });
+        } catch (e) {
+          console.warn("Firestore save failed:", e);
+        }
+      }, 450);
+    };
+  }
+
+  async function startForUser(uid) {
+    ref = doc(db, "users", uid);
+
+    // One-time load (fast)
+    try {
+      const snap = await getDoc(ref);
+      if (snap.exists() && snap.data()?.state) queueApply(snap.data().state);
+    } catch (e) {
+      console.warn("Firestore initial load failed:", e);
+    }
+
+    // Live updates
+    onSnapshot(ref, (snap) => {
+      const data = snap.data();
+      if (data?.state) queueApply(data.state);
+    });
+
+    window.__fb.ready = true;
+    setSaveFn();
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      try { await signInAnonymously(auth); } catch (e) { console.warn("Anonymous sign-in failed:", e); }
+      return;
+    }
+    await startForUser(user.uid);
+  });
+</script>
 <script>
 /** ---------------------------
  *  Storage (metadata + audio)
@@ -655,6 +740,8 @@ async function idbClear(){
 
 function saveState(){
   localStorage.setItem(LS_KEY, JSON.stringify(state));
+  // Firestore sync (metadata only). Audio stays local.
+  if (window.__fb && typeof window.__fb.save === "function") window.__fb.save(state);
 }
 function loadState(){
   const raw = localStorage.getItem(LS_KEY);
@@ -1125,6 +1212,34 @@ function render(){
   renderGenreFilter();
   renderQuickButtons();
   renderTable();
+}
+
+// --- Firestore remote apply hook (metadata only) ---
+window.__fb = window.__fb || { save:null, apply:null, pending:null, ready:false };
+window.__fbApplyingRemote = false;
+
+// Called by the Firebase module script when remote data arrives
+window.__fb.apply = (remoteState) => {
+  try{
+    if (!remoteState || !remoteState.tracks || !remoteState.ui) return;
+    window.__fbApplyingRemote = true;
+
+    // Replace metadata state with remote
+    state = remoteState;
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+
+    // If you were playing something, stop showing stale play icons
+    // (Audio stays local; you can hit play again.)
+    render();
+  } finally {
+    window.__fbApplyingRemote = false;
+  }
+};
+
+// If remote data arrived before this script attached apply(), apply it now.
+if (window.__fb.pending){
+  try { window.__fb.apply(window.__fb.pending); } catch {}
+  window.__fb.pending = null;
 }
 
 /** ---------------------------
