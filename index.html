@@ -258,10 +258,10 @@
       overflow:hidden;
     }
     .table-wrap{
-    max-height: calc(100vh - 160px); /* adjust if needed */
-    overflow-y: auto;
-    overflow-x: hidden;
-    position: relative;
+      max-height: calc(100vh - 160px); /* adjust if needed */
+      overflow-y: auto;
+      overflow-x: hidden;
+      position: relative;
     }
     table{
       width:100%;
@@ -310,8 +310,8 @@
     th[data-key="genre"], td[data-key="genre"]{ min-width: 170px; }
 
     /* Checkbox columns: equal width + centered (header + cells) */
-    th[data-key="complete"], th[data-key="master"], th[data-key="released"],
-    th[data-key="shortList"], th[data-key="topPicks"]{
+    th[data-key="Complete"], th[data-key="master"], th[data-key="released"],
+    th[data-key="topPicks"], th[data-key="queue"]{
       text-align:center;
       width: 82px;
       min-width: 82px;
@@ -325,6 +325,7 @@
     }
 
     th[data-key="listen"], td[data-key="listen"]{ text-align:center; width: 90px; min-width: 90px; }
+    th[data-key="keySig"], td[data-key="keySig"]{ text-align:center; width: 110px; min-width: 110px; }
     th[data-key="length"], td[data-key="length"]{ text-align:center; width: 110px; min-width: 110px; }
     th[data-key="actions"], td[data-key="actions"]{ text-align:center; width: 110px; min-width: 110px; }
 
@@ -368,6 +369,22 @@
       background: #e9eefc;
     }
 
+    .keyInput{
+      width: 100%;
+      max-width: 100px;
+      border:1px solid rgba(36,48,74,.75);
+      background: rgba(11,14,20,.35);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 7px 10px;
+      outline:none;
+      text-align:center;
+    }
+    .keyInput:focus{
+      border-color: rgba(124,92,255,.75);
+      box-shadow: 0 0 0 3px rgba(124,92,255,.12);
+    }
+
     .listenBtn{
       width: 44px;
       height: 36px;
@@ -387,8 +404,8 @@
       box-shadow:none;
     }
     .listenBtn.dragover{
-    outline: 2px solid rgba(45,212,191,.9);
-    box-shadow: 0 0 0 4px rgba(45,212,191,.15);
+      outline: 2px solid rgba(45,212,191,.9);
+      box-shadow: 0 0 0 4px rgba(45,212,191,.15);
     }
     .mini{
       position:fixed;
@@ -594,91 +611,10 @@
 <input type="file" id="restoreFile" accept="application/json" hidden />
 <input type="file" id="audioPicker" accept="audio/*" hidden />
 
-<script type="module">
-  // Firebase (Auth + Firestore) for saving metadata only (audio stays local in IndexedDB)
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+<!-- Essentia.js (local-only analysis; no uploads) -->
+<script src="https://cdn.jsdelivr.net/npm/essentia.js@0.1.3/dist/essentia-wasm.web.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/essentia.js@0.1.3/dist/essentia.js-core.js"></script>
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyA6mU7YqivkCJC6wOsfJri8tIzkeeU9-LY",
-    authDomain: "jatlas-f175b.firebaseapp.com",
-    projectId: "jatlas-f175b",
-    storageBucket: "jatlas-f175b.firebasestorage.app",
-    messagingSenderId: "876999634932",
-    appId: "1:876999634932:web:742d93d3b0c5ddb42753a1",
-    measurementId: "G-NGMH2LEC9J"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  try { getAnalytics(app); } catch {}
-
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-
-  // Global bridge for the non-module app script
-  window.__fb = window.__fb || { save: null, apply: null, pending: null, ready: false };
-
-  let ref = null;
-  let saveTimer = null;
-  let isApplyingRemote = false;
-
-  function queueApply(remoteState) {
-    // If your main script hasn't attached its apply() yet, stash it
-    if (window.__fb && typeof window.__fb.apply === "function") {
-      isApplyingRemote = true;
-      try { window.__fb.apply(remoteState); } finally { isApplyingRemote = false; }
-    } else {
-      window.__fb.pending = remoteState;
-    }
-  }
-
-  function setSaveFn() {
-    window.__fb.save = (stateObj) => {
-      if (!window.__fb.ready || !ref) return;
-      if (isApplyingRemote || window.__fbApplyingRemote) return;
-
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(async () => {
-        try {
-          await setDoc(ref, { state: stateObj, updatedAt: serverTimestamp() }, { merge: true });
-        } catch (e) {
-          console.warn("Firestore save failed:", e);
-        }
-      }, 450);
-    };
-  }
-
-  async function startForUser(uid) {
-    ref = doc(db, "users", uid);
-
-    // One-time load (fast)
-    try {
-      const snap = await getDoc(ref);
-      if (snap.exists() && snap.data()?.state) queueApply(snap.data().state);
-    } catch (e) {
-      console.warn("Firestore initial load failed:", e);
-    }
-
-    // Live updates
-    onSnapshot(ref, (snap) => {
-      const data = snap.data();
-      if (data?.state) queueApply(data.state);
-    });
-
-    window.__fb.ready = true;
-    setSaveFn();
-  }
-
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      try { await signInAnonymously(auth); } catch (e) { console.warn("Anonymous sign-in failed:", e); }
-      return;
-    }
-    await startForUser(user.uid);
-  });
-</script>
 <script>
 /** ---------------------------
  *  Storage (metadata + audio)
@@ -740,8 +676,6 @@ async function idbClear(){
 
 function saveState(){
   localStorage.setItem(LS_KEY, JSON.stringify(state));
-  // Firestore sync (metadata only). Audio stays local.
-  if (window.__fb && typeof window.__fb.save === "function") window.__fb.save(state);
 }
 function loadState(){
   const raw = localStorage.getItem(LS_KEY);
@@ -783,14 +717,77 @@ async function attachFilesStartingAtTrack(startTrackId, files){
 }
 
 /** ---------------------------
+ *  Essentia (Key Detection)
+ * --------------------------*/
+let essentia = null;
+
+async function initEssentia(){
+  if (essentia) return essentia;
+  if (typeof EssentiaWASM !== "function" || typeof Essentia !== "function"){
+    throw new Error("Essentia scripts not loaded.");
+  }
+  const wasm = await EssentiaWASM();
+  essentia = new Essentia(wasm);
+  return essentia;
+}
+
+function keyLabelFromOutput(out){
+  const k = out?.key ? String(out.key) : "";
+  const scale = out?.scale ? String(out.scale) : "";
+  if (!k) return "";
+  // Use "m" for minor to match your examples: F#m, etc.
+  return (scale.toLowerCase() === "minor") ? `${k}m` : `${k}`;
+}
+
+function sliceForAnalysis(float32, sampleRate, maxSeconds = 75){
+  // Keep it simple: analyze the first N seconds (fast, stable).
+  // (You can later upgrade to multi-slice sampling if you want.)
+  const maxLen = Math.max(0, Math.floor(sampleRate * maxSeconds));
+  if (!maxLen || float32.length <= maxLen) return float32;
+  return float32.slice(0, maxLen);
+}
+
+async function detectKeyFromFile(file){
+  const e = await initEssentia();
+
+  const arrayBuf = await file.arrayBuffer();
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const audioBuf = await ac.decodeAudioData(arrayBuf.slice(0));
+
+  const sr = audioBuf.sampleRate || 44100;
+
+  // Downmix to mono
+  const ch0 = audioBuf.getChannelData(0);
+  const ch1 = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1) : null;
+  const mono = new Float32Array(ch0.length);
+  if (ch1) {
+    for (let i = 0; i < mono.length; i++) mono[i] = 0.5 * (ch0[i] + ch1[i]);
+  } else {
+    mono.set(ch0);
+  }
+
+  const monoSlice = sliceForAnalysis(mono, sr, 75);
+  const v = e.arrayToVector(monoSlice);
+
+  // KeyExtractor signatures can differ slightly; try with SR first, then fallback.
+  let out;
+  try{
+    out = e.KeyExtractor(v, sr);
+  }catch{
+    out = e.KeyExtractor(v);
+  }
+
+  return { label: keyLabelFromOutput(out), raw: out };
+}
+
+/** ---------------------------
  *  App State
  * --------------------------*/
-const FLAG_KEYS = ["Complete","master","released","shortList","topPicks"];
+const FLAG_KEYS = ["Complete","master","released","topPicks"];
 const FLAG_LABELS = {
   Complete: "Complete",
   master: "master",
   released: "Released",
-  shortList: "Short list",
   topPicks: "Top Picks",
 };
 const TABS = [
@@ -798,7 +795,6 @@ const TABS = [
   {id:"Complete", label:"Complete"},
   {id:"master", label:"master"},
   {id:"released", label:"Released"},
-  {id:"shortList", label:"Short list"},
   {id:"topPicks", label:"Top Picks"},
   {id:"listen", label:"Listen"},
 ];
@@ -816,6 +812,43 @@ const defaultState = {
 };
 
 let state = loadState() || structuredClone(defaultState);
+
+function migrateStateInPlace(){
+  // Remove old "shortList" tab if user had it selected
+  if (state?.ui?.activeTab === "shortList") state.ui.activeTab = "all";
+
+  // Ensure tracks have new fields; remove old flag
+  if (Array.isArray(state?.tracks)){
+    for (const t of state.tracks){
+      if (!t) continue;
+
+      // New fields
+      if (typeof t.queue !== "boolean") t.queue = false;
+      if (typeof t.keySig !== "string") t.keySig = "";
+
+      // Remove old shortList flag if present
+      if (t.flags && typeof t.flags === "object" && "shortList" in t.flags){
+        try { delete t.flags.shortList; } catch {}
+      }
+
+      // If flags missing, re-add safe defaults
+      if (!t.flags || typeof t.flags !== "object"){
+        t.flags = { Complete:false, master:false, released:false, topPicks:false };
+      } else {
+        // ensure required keys exist
+        for (const k of FLAG_KEYS){
+          if (!(k in t.flags)) t.flags[k] = false;
+        }
+      }
+    }
+  }
+
+  // If sorting was on shortList, reset to title
+  if (state?.ui?.sort?.key === "shortList"){
+    state.ui.sort = { key: "title", dir: "asc" };
+  }
+}
+migrateStateInPlace();
 
 /** ---------------------------
  *  Helpers
@@ -905,7 +938,9 @@ function buildHeaders(){
     {key:"title", label:"Track"},
     {key:"genre", label:"Genre"},
     ...FLAG_KEYS.map(k => ({key:k, label:FLAG_LABELS[k]})),
+    {key:"queue", label:"Queue"},
     {key:"listen", label:"Listen"},
+    {key:"keySig", label:"Key"},
     {key:"length", label:"Length"},
     {key:"actions", label:"Actions"},
   ];
@@ -931,7 +966,8 @@ function computeCounts(){
   const c = {};
   c.all = state.tracks.length;
   FLAG_KEYS.forEach(k => c[k] = state.tracks.filter(tr => !!tr.flags?.[k]).length);
-  c.listen = state.tracks.filter(tr => !!tr.hasAudio).length;
+  // Listen tab = queue
+  c.listen = state.tracks.filter(tr => !!tr.queue).length;
   return c;
 }
 function renderTabs(){
@@ -961,7 +997,9 @@ function renderGenreFilter(){
 function applyFilters(tracks){
   let out = tracks;
   const tab = state.ui.activeTab;
-  if (tab === "listen") out = out.filter(t => !!t.hasAudio);
+
+  // Listen tab now means Queue tab behavior
+  if (tab === "listen") out = out.filter(t => !!t.queue);
   else if (tab !== "all") out = out.filter(t => !!t.flags?.[tab]);
 
   const q = (state.ui.search || "").trim().toLowerCase();
@@ -986,6 +1024,8 @@ function applySort(tracks){
     if (key === "title") return (t.title || "").toLowerCase();
     if (key === "genre") return (t.genre || "").toLowerCase();
     if (key === "length") return t.durationSec || 0;
+    if (key === "keySig") return (t.keySig || "").toLowerCase();
+    if (key === "queue") return t.queue ? 1 : 0;
     if (FLAG_KEYS.includes(key)) return t.flags?.[key] ? 1 : 0;
     return (t[key] ?? "");
   };
@@ -1066,19 +1106,7 @@ function renderTable(){
       setTimeout(()=>document.querySelector(`input[data-focusid="${toAdd[0]?.id || ""}"]`)?.focus(), 30);
     });
 
-    // badges
-    const badges = document.createElement("div");
-    badges.className = "row-badges";
-    const b = [];
-    b.slice(0,3).forEach(x=>{
-      const sp = document.createElement("span");
-      sp.className = `badge ${x.cls}`;
-      sp.textContent = x.txt;
-      badges.appendChild(sp);
-    });
-
     titleWrap.appendChild(titleInput);
-    if (badges.childNodes.length) titleWrap.appendChild(badges);
     tdTitle.appendChild(titleWrap);
     trEl.appendChild(tdTitle);
 
@@ -1097,7 +1125,7 @@ function renderTable(){
     tdGenre.appendChild(sel);
     trEl.appendChild(tdGenre);
 
-    // Checkboxes (centered + equal width)
+    // Flags
     FLAG_KEYS.forEach(k=>{
       const td = document.createElement("td");
       td.className = "checkcell";
@@ -1116,6 +1144,24 @@ function renderTable(){
       td.appendChild(cb);
       trEl.appendChild(td);
     });
+
+    // Queue (NEW)
+    const tdQueue = document.createElement("td");
+    tdQueue.className = "checkcell";
+    tdQueue.dataset.key = "queue";
+    const qcb = document.createElement("input");
+    qcb.type = "checkbox";
+    qcb.className = "check";
+    qcb.checked = !!tr.queue;
+    qcb.addEventListener("change", ()=>{
+      tr.queue = qcb.checked;
+      saveState();
+      renderTabs();
+      // If we’re currently in Listen tab, we want it to update instantly
+      if (state.ui.activeTab === "listen") render();
+    });
+    tdQueue.appendChild(qcb);
+    trEl.appendChild(tdQueue);
 
     // Listen (single button: + attach OR play/pause if attached)
     const tdListen = document.createElement("td");
@@ -1154,31 +1200,50 @@ function renderTable(){
         render();
       }
     });
-        // --- Drag & drop support on the Listen button ---
+
+    // Drag & drop support on the Listen button
     listenBtn.addEventListener("dragenter", (e) => {
-    e.preventDefault();
-    listenBtn.classList.add("dragover");
+      e.preventDefault();
+      listenBtn.classList.add("dragover");
     });
     listenBtn.addEventListener("dragover", (e) => {
-    e.preventDefault();
+      e.preventDefault();
     });
     listenBtn.addEventListener("dragleave", () => {
-    listenBtn.classList.remove("dragover");
+      listenBtn.classList.remove("dragover");
     });
     listenBtn.addEventListener("drop", async (e) => {
-    e.preventDefault();
-    listenBtn.classList.remove("dragover");
+      e.preventDefault();
+      listenBtn.classList.remove("dragover");
 
-    const files = e.dataTransfer?.files;
-    if (!files || !files.length) return;
+      const files = e.dataTransfer?.files;
+      if (!files || !files.length) return;
 
-    // Drop multiple files onto one row: fill this row + next rows
-  await attachFilesStartingAtTrack(tr.id, files);
-  render();
-});
+      // Drop multiple files onto one row: fill this row + next rows
+      await attachFilesStartingAtTrack(tr.id, files);
+      render();
+    });
 
     tdListen.appendChild(listenBtn);
     trEl.appendChild(tdListen);
+
+    // Key column (NEW, editable)
+    const tdKey = document.createElement("td");
+    tdKey.dataset.key = "keySig";
+    tdKey.style.textAlign = "center";
+
+    const keyIn = document.createElement("input");
+    keyIn.className = "keyInput";
+    keyIn.type = "text";
+    keyIn.placeholder = "F#m";
+    keyIn.value = tr.keySig || "";
+    keyIn.addEventListener("input", ()=>{
+      tr.keySig = keyIn.value;
+      saveState();
+    });
+
+    tdKey.appendChild(keyIn);
+    trEl.appendChild(tdKey);
 
     // Length column
     const tdLen = document.createElement("td");
@@ -1214,34 +1279,6 @@ function render(){
   renderTable();
 }
 
-// --- Firestore remote apply hook (metadata only) ---
-window.__fb = window.__fb || { save:null, apply:null, pending:null, ready:false };
-window.__fbApplyingRemote = false;
-
-// Called by the Firebase module script when remote data arrives
-window.__fb.apply = (remoteState) => {
-  try{
-    if (!remoteState || !remoteState.tracks || !remoteState.ui) return;
-    window.__fbApplyingRemote = true;
-
-    // Replace metadata state with remote
-    state = remoteState;
-    localStorage.setItem(LS_KEY, JSON.stringify(state));
-
-    // If you were playing something, stop showing stale play icons
-    // (Audio stays local; you can hit play again.)
-    render();
-  } finally {
-    window.__fbApplyingRemote = false;
-  }
-};
-
-// If remote data arrived before this script attached apply(), apply it now.
-if (window.__fb.pending){
-  try { window.__fb.apply(window.__fb.pending); } catch {}
-  window.__fb.pending = null;
-}
-
 /** ---------------------------
  *  Track ops
  * --------------------------*/
@@ -1250,7 +1287,9 @@ function makeTrack(title=""){
     id: uid(),
     title: title || "",
     genre: "",
-    flags: { Complete:false, master:false, released:false, shortList:false, topPicks:false },
+    flags: { Complete:false, master:false, released:false, topPicks:false },
+    queue: false,     // NEW
+    keySig: "",       // NEW
     hasAudio: false,
     durationSec: 0,
     audioName: ""
@@ -1279,7 +1318,7 @@ function trackById(id){
 }
 
 /** ---------------------------
- *  Audio attach + duration
+ *  Audio attach + duration + key detection
  * --------------------------*/
 async function attachAudioToTrack(trackId, file){
   const tr = trackById(trackId);
@@ -1300,7 +1339,17 @@ async function attachAudioToTrack(trackId, file){
   tr.hasAudio = true;
   tr.durationSec = Number.isFinite(dur) ? Math.round(dur) : 0;
   tr.audioName = file.name || "";
+
+  // NEW: Auto key detection (local only)
+  try{
+    const { label } = await detectKeyFromFile(file);
+    if (label) tr.keySig = label;
+  }catch(e){
+    console.warn("Key detection failed:", e);
+  }
+
   saveState();
+  renderTabs();
 }
 
 /** ---------------------------
@@ -1346,6 +1395,7 @@ async function loadIntoPlayer(trackId){
   seek.value = 0;
   startRaf();
 }
+
 function startRaf(){
   stopRaf();
   const tick = () => {
@@ -1386,16 +1436,31 @@ function unloadPlayer(){
   bigPlayBtn.textContent = "▶";
   playerNote.textContent = "Attach audio to a track, then press Play on that row.";
 }
+
+function findNextQueuedTrackIdAfter(currentId){
+  const idx = state.tracks.findIndex(t => t.id === currentId);
+  if (idx < 0) return null;
+  for (let i = idx + 1; i < state.tracks.length; i++){
+    const t = state.tracks[i];
+    if (t && t.queue && t.hasAudio) return t.id;
+  }
+  return null;
+}
+
 seek.addEventListener("input", ()=>{
   const d = audio.duration || 0;
   if (!d) return;
   audio.currentTime = (Number(seek.value) / 1000) * d;
 });
+
 bigPlayBtn.addEventListener("click", async ()=>{
   if (!currentTrackId){
-    const filtered = applySort(applyFilters(state.tracks)).filter(t=>t.hasAudio);
-    if (filtered.length){
-      await loadIntoPlayer(filtered[0].id);
+    // Prefer: first queued+hasAudio if any; else first hasAudio
+    const firstQueued = state.tracks.find(t => t.queue && t.hasAudio);
+    const firstAny = state.tracks.find(t => t.hasAudio);
+    const pick = firstQueued || firstAny;
+    if (pick){
+      await loadIntoPlayer(pick.id);
       await audio.play().catch(()=>{});
       render();
     }
@@ -1405,9 +1470,28 @@ bigPlayBtn.addEventListener("click", async ()=>{
   else audio.pause();
   render();
 });
+
 document.getElementById("stopBtn").addEventListener("click", ()=>{ stopPlayback(); render(); });
 document.getElementById("clearPlayerBtn").addEventListener("click", ()=>{ stopPlayback(); unloadPlayer(); render(); });
-audio.addEventListener("ended", ()=> render());
+
+// NEW: Auto-play next queued track on end
+audio.addEventListener("ended", async ()=>{
+  // Only auto-advance if there's a "next queued" after the current track in table order.
+  if (!currentTrackId){
+    render();
+    return;
+  }
+
+  const nextId = findNextQueuedTrackIdAfter(currentTrackId);
+  if (!nextId){
+    render();
+    return; // stop if no next queued
+  }
+
+  await loadIntoPlayer(nextId);
+  await audio.play().catch(()=>{});
+  render();
+});
 
 /** ---------------------------
  *  Top controls
@@ -1463,6 +1547,7 @@ document.getElementById("restoreBtn").addEventListener("click", ()=>{
   restoreFile.value = "";
   restoreFile.click();
 });
+
 restoreFile.addEventListener("change", async ()=>{
   const file = restoreFile.files?.[0];
   if (!file) return;
@@ -1477,6 +1562,7 @@ restoreFile.addEventListener("change", async ()=>{
   if (!ok) return;
 
   state = parsed.metadata;
+  migrateStateInPlace(); // ensure new fields exist after restore
 
   if (parsed.audio && typeof parsed.audio === "object"){
     for (const [trackId, dataUrl] of Object.entries(parsed.audio)){
